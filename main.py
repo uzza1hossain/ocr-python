@@ -17,6 +17,9 @@ st.write("This tool runs OCR on PDFs and images, recognizing both Bengali and En
 # File uploader
 uploaded_file = st.file_uploader("Choose a PDF or image file", type=["pdf", "png", "jpg", "jpeg"])
 
+# Create a placeholder for the processing status
+processing_status = st.empty()
+
 # Create a placeholder for the full text
 full_text_placeholder = st.empty()
 
@@ -46,6 +49,7 @@ def process_pdf(pdf_file):
     images = convert_from_bytes(pdf_bytes)
     all_text = []
     for i, image in enumerate(images):
+        processing_status.write(f"Processing page {i+1} of {len(images)}...")
         text = perform_ocr(image)
         all_text.append(text)
         
@@ -62,7 +66,7 @@ def create_epub(text, title="OCR Result"):
     book = epub.EpubBook()
     book.set_identifier('id123456')
     book.set_title(title)
-    book.set_language('bn')
+    book.set_language('en')
 
     c1 = epub.EpubHtml(title='Content', file_name='content.xhtml', lang='en')
     c1.content = f'<h1>{title}</h1><p>{text.replace(chr(10), "<br>")}</p>'
@@ -79,7 +83,7 @@ def create_epub(text, title="OCR Result"):
 
 if uploaded_file is not None:
     file_type = uploaded_file.type
-    st.write(f"Processing {file_type} file...")
+    processing_status.write(f"Processing {file_type} file...")
 
     try:
         if file_type == "application/pdf":
@@ -92,6 +96,8 @@ if uploaded_file is not None:
             full_text = ""
 
         if full_text:
+            processing_status.write("Processing complete ✅")
+            
             # Create two columns for the download buttons
             col1, col2 = download_buttons_placeholder.columns(2)
 
@@ -103,18 +109,21 @@ if uploaded_file is not None:
                 mime="text/plain"
             )
 
-            # Create and display the EPUB download button
+            # Create the EPUB file
             epub_book = create_epub(full_text)
             with tempfile.NamedTemporaryFile(delete=False, suffix='.epub') as tmp_file:
                 epub.write_epub(tmp_file.name, epub_book)
                 with open(tmp_file.name, 'rb') as file:
                     epub_data = file.read()
-                col2.download_button(
-                    label="Download as EPUB",
-                    data=epub_data,
-                    file_name="ocr_result.epub",
-                    mime="application/epub+zip"
-                )
+                
+            # Display the EPUB download button
+            col2.download_button(
+                label="Download as EPUB",
+                data=epub_data,
+                file_name="ocr_result.epub",
+                mime="application/epub+zip"
+            )
+            
             os.unlink(tmp_file.name)  # Delete the temporary file
 
     except Exception as e:
