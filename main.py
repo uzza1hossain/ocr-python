@@ -8,6 +8,12 @@ import ebooklib
 from ebooklib import epub
 import tempfile
 
+# Initialize session state
+if 'full_text' not in st.session_state:
+    st.session_state.full_text = ""
+if 'file_processed' not in st.session_state:
+    st.session_state.file_processed = False
+
 # Specify the path to your custom tessdata directory
 custom_tessdata_dir = os.path.abspath('./custom_tessdata')
 
@@ -81,52 +87,54 @@ def create_epub(text, title="OCR Result"):
 
     return book
 
-if uploaded_file is not None:
+if uploaded_file is not None and not st.session_state.file_processed:
     file_type = uploaded_file.type
     processing_status.write(f"Processing {file_type} file...")
 
     try:
         if file_type == "application/pdf":
-            full_text = process_pdf(uploaded_file)
+            st.session_state.full_text = process_pdf(uploaded_file)
         elif file_type.startswith("image/"):
-            full_text = process_image(uploaded_file)
-            full_text_placeholder.text_area("Full Text", full_text, height=300)
+            st.session_state.full_text = process_image(uploaded_file)
+            full_text_placeholder.text_area("Full Text", st.session_state.full_text, height=300)
         else:
             st.error("Unsupported file type")
-            full_text = ""
+            st.session_state.full_text = ""
 
-        if full_text:
+        if st.session_state.full_text:
             processing_status.write("Processing complete ✅")
-            
-            # Create two columns for the download buttons
-            col1, col2 = download_buttons_placeholder.columns(2)
-
-            # Display the text download button
-            col1.download_button(
-                label="Download full text",
-                data=full_text,
-                file_name="ocr_result.txt",
-                mime="text/plain"
-            )
-
-            # Create the EPUB file
-            epub_book = create_epub(full_text)
-            with tempfile.NamedTemporaryFile(delete=False, suffix='.epub') as tmp_file:
-                epub.write_epub(tmp_file.name, epub_book)
-                with open(tmp_file.name, 'rb') as file:
-                    epub_data = file.read()
-                
-            # Display the EPUB download button
-            col2.download_button(
-                label="Download as EPUB",
-                data=epub_data,
-                file_name="ocr_result.epub",
-                mime="application/epub+zip"
-            )
-            
-            os.unlink(tmp_file.name)  # Delete the temporary file
+            st.session_state.file_processed = True
 
     except Exception as e:
         st.error(f"An error occurred: {str(e)}")
+
+if st.session_state.file_processed:
+    # Create two columns for the download buttons
+    col1, col2 = download_buttons_placeholder.columns(2)
+
+    # Display the text download button
+    col1.download_button(
+        label="Download full text",
+        data=st.session_state.full_text,
+        file_name="ocr_result.txt",
+        mime="text/plain"
+    )
+
+    # Create the EPUB file
+    epub_book = create_epub(st.session_state.full_text)
+    with tempfile.NamedTemporaryFile(delete=False, suffix='.epub') as tmp_file:
+        epub.write_epub(tmp_file.name, epub_book)
+        with open(tmp_file.name, 'rb') as file:
+            epub_data = file.read()
+        
+    # Display the EPUB download button
+    col2.download_button(
+        label="Download as EPUB",
+        data=epub_data,
+        file_name="ocr_result.epub",
+        mime="application/epub+zip"
+    )
+    
+    os.unlink(tmp_file.name)  # Delete the temporary file
 
 st.write("Note: This tool uses Tesseract for OCR and pdf2image to convert PDFs into images.")
