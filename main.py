@@ -4,6 +4,9 @@ from pdf2image import convert_from_bytes
 from PIL import Image
 import io
 import os
+import ebooklib
+from ebooklib import epub
+import tempfile
 
 # Specify the path to your custom tessdata directory
 custom_tessdata_dir = os.path.abspath('./custom_tessdata')
@@ -17,8 +20,8 @@ uploaded_file = st.file_uploader("Choose a PDF or image file", type=["pdf", "png
 # Create a placeholder for the full text
 full_text_placeholder = st.empty()
 
-# Create a placeholder for the download button
-download_button_placeholder = st.empty()
+# Create a placeholder for the download buttons
+download_buttons_placeholder = st.empty()
 
 def perform_ocr(image):
     try:
@@ -55,6 +58,25 @@ def process_pdf(pdf_file):
     
     return full_text
 
+def create_epub(text, title="OCR Result"):
+    book = epub.EpubBook()
+    book.set_identifier('id123456')
+    book.set_title(title)
+    book.set_language('bn')
+
+    c1 = epub.EpubHtml(title='Content', file_name='content.xhtml', lang='en')
+    c1.content = f'<h1>{title}</h1><p>{text.replace(chr(10), "<br>")}</p>'
+
+    book.add_item(c1)
+
+    book.toc = (epub.Link('content.xhtml', 'Content', 'content'),)
+    book.add_item(epub.EpubNcx())
+    book.add_item(epub.EpubNav())
+
+    book.spine = ['nav', c1]
+
+    return book
+
 if uploaded_file is not None:
     file_type = uploaded_file.type
     st.write(f"Processing {file_type} file...")
@@ -70,13 +92,31 @@ if uploaded_file is not None:
             full_text = ""
 
         if full_text:
-            # Display the download button below the full text box
-            download_button_placeholder.download_button(
+            # Create two columns for the download buttons
+            col1, col2 = download_buttons_placeholder.columns(2)
+
+            # Display the text download button
+            col1.download_button(
                 label="Download full text",
                 data=full_text,
                 file_name="ocr_result.txt",
                 mime="text/plain"
             )
+
+            # Create and display the EPUB download button
+            epub_book = create_epub(full_text)
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.epub') as tmp_file:
+                epub.write_epub(tmp_file.name, epub_book)
+                with open(tmp_file.name, 'rb') as file:
+                    epub_data = file.read()
+                col2.download_button(
+                    label="Download as EPUB",
+                    data=epub_data,
+                    file_name="ocr_result.epub",
+                    mime="application/epub+zip"
+                )
+            os.unlink(tmp_file.name)  # Delete the temporary file
+
     except Exception as e:
         st.error(f"An error occurred: {str(e)}")
 
