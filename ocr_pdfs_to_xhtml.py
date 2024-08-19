@@ -3,11 +3,7 @@ import os
 import re
 import pytesseract
 from pdf2image import convert_from_bytes
-from PIL import Image
-import io
-import ebooklib
 from ebooklib import epub
-import tempfile
 
 # Specify the path to your custom tessdata directory
 custom_tessdata_dir = os.path.abspath('./custom_tessdata')
@@ -35,80 +31,70 @@ def process_pdf(pdf_file):
     
     return "\n\n".join(all_text)
 
-def create_xhtml(text, output_file):
-    paragraphs = text.split("\n\n")
-    
-    xhtml_content = '<?xml version="1.0" encoding="utf-8"?>\n'
-    xhtml_content += '<!DOCTYPE html>\n\n'
-    xhtml_content += '<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops">\n'
-    xhtml_content += '<head>\n'
-    xhtml_content += '  <title></title>\n'
-    xhtml_content += '</head>\n\n'
-    xhtml_content += '<body>\n'
-    
-    for paragraph in paragraphs:
-        xhtml_content += f'  <p>{paragraph.strip()}</p>\n'
-    
-    xhtml_content += '</body>\n'
-    xhtml_content += '</html>'
-    
-    with open(output_file, 'w', encoding='utf-8') as file:
-        file.write(xhtml_content)
+def extract_last_number(filename):
+    # Extract the last number or range from the filename
+    match = re.search(r'(\d+)(-\d+)?(?=\.pdf$)', filename)
+    if match:
+        start = int(match.group(1))
+        end = int(match.group(2)[1:]) if match.group(2) else start
+        return start, end
+    return float('inf'), float('inf')  # Return a high value to sort invalid names last
 
-def create_epub(xhtml_files, output_file):
+def create_epub_from_ocr(folder_path, output_file):
     book = epub.EpubBook()
     book.set_identifier('id123456')
     book.set_title('OCR Result')
     book.set_language('en')
-    
+    book.add_author('Generated Author')
+
     spine = ['nav']
     toc = []
-    
-    for i, xhtml_file in enumerate(xhtml_files, start=1):
-        with open(xhtml_file, 'r', encoding='utf-8') as file:
-            xhtml_content = file.read()
+
+    pdf_files = [f for f in os.listdir(folder_path) if f.endswith(".pdf")]
+    pdf_files.sort(key=lambda f: extract_last_number(f))
+
+    for filename in pdf_files:
+        pdf_file = os.path.join(folder_path, filename)
+        print(f"Processing file: {pdf_file}")
         
-        chapter = epub.EpubHtml(title=f'Chapter {i}', file_name=os.path.basename(xhtml_file), lang='en')
-        chapter.content = xhtml_content
-        
-        book.add_item(chapter)
-        spine.append(chapter)
-        toc.append(epub.Link(os.path.basename(xhtml_file), f'Chapter {i}', f'chapter_{i}'))
+        try:
+            full_text = process_pdf(pdf_file)
+            if full_text.strip():
+                chapter_title = os.path.splitext(filename)[0]
+                chapter = epub.EpubHtml(
+                    title=chapter_title, 
+                    file_name=f'{chapter_title}.xhtml', 
+                    lang='en'
+                )
+                chapter.content = f'<h1>{chapter_title}</h1><p>{full_text}</p>'
+                
+                book.add_item(chapter)
+                spine.append(chapter)
+                toc.append(epub.Link(f'{chapter_title}.xhtml', chapter_title, chapter_title))
+            else:
+                print(f"No text extracted from {filename}")
+        except Exception as e:
+            print(f"An error occurred while processing {pdf_file}: {str(e)}")
     
+    if not toc:
+        print("No valid content to add to the EPUB.")
+        return
+
     book.toc = tuple(toc)
     book.add_item(epub.EpubNcx())
     book.add_item(epub.EpubNav())
     book.spine = spine
-    
-    epub.write_epub(output_file, book, {})
 
-def process_folder(folder_path):
-    output_folder = os.path.join(folder_path, "xhtml_output")
-    os.makedirs(output_folder, exist_ok=True)
-    
-    for filename in os.listdir(folder_path):
-        if filename.endswith(".pdf"):
-            pdf_file = os.path.join(folder_path, filename)
-            print(f"Processing file: {pdf_file}")
-            
-            try:
-                full_text = process_pdf(pdf_file)
-                output_file = os.path.join(output_folder, os.path.splitext(filename)[0] + ".xhtml")
-                create_xhtml(full_text, output_file)
-                print(f"XHTML file created: {output_file}")
-            except Exception as e:
-                print(f"An error occurred while processing {pdf_file}: {str(e)}")
-    
-    xhtml_files = [os.path.join(output_folder, f) for f in os.listdir(output_folder) if f.endswith(".xhtml")]
-    xhtml_files.sort(key=lambda f: int(re.findall(r'\d+', os.path.splitext(f)[0].split('-')[-1])[0]))
-    
-    epub_output_file = os.path.join(folder_path, "ocr_result.epub")
-    create_epub(xhtml_files, epub_output_file)
-    print(f"EPUB file created: {epub_output_file}")
+    try:
+        epub.write_epub(output_file, book, {})
+        print(f"EPUB file created: {output_file}")
+    except Exception as e:
+        print(f"Error writing EPUB: {str(e)}")
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="OCR PDFs and create XHTML files")
+    parser = argparse.ArgumentParser(description="OCR PDFs and create EPUB")
     parser.add_argument("folder_path", help="Path to the folder containing PDF files")
     args = parser.parse_args()
 
-    process_folder(args.folder_path)
+    output_epub_file = os.path.join(args.folder_path, "ocr_result.epub")
+    create_epub_from_ocr(args.folder_path, output_epub_file)
