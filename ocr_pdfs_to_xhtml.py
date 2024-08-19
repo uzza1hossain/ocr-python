@@ -1,5 +1,6 @@
 import argparse
 import os
+import re
 import pytesseract
 from pdf2image import convert_from_bytes
 from PIL import Image
@@ -54,6 +55,33 @@ def create_xhtml(text, output_file):
     with open(output_file, 'w', encoding='utf-8') as file:
         file.write(xhtml_content)
 
+def create_epub(xhtml_files, output_file):
+    book = epub.EpubBook()
+    book.set_identifier('id123456')
+    book.set_title('OCR Result')
+    book.set_language('en')
+    
+    spine = ['nav']
+    toc = []
+    
+    for i, xhtml_file in enumerate(xhtml_files, start=1):
+        with open(xhtml_file, 'r', encoding='utf-8') as file:
+            xhtml_content = file.read()
+        
+        chapter = epub.EpubHtml(title=f'Chapter {i}', file_name=os.path.basename(xhtml_file), lang='en')
+        chapter.content = xhtml_content
+        
+        book.add_item(chapter)
+        spine.append(chapter)
+        toc.append(epub.Link(os.path.basename(xhtml_file), f'Chapter {i}', f'chapter_{i}'))
+    
+    book.toc = tuple(toc)
+    book.add_item(epub.EpubNcx())
+    book.add_item(epub.EpubNav())
+    book.spine = spine
+    
+    epub.write_epub(output_file, book, {})
+
 def process_folder(folder_path):
     output_folder = os.path.join(folder_path, "xhtml_output")
     os.makedirs(output_folder, exist_ok=True)
@@ -70,6 +98,13 @@ def process_folder(folder_path):
                 print(f"XHTML file created: {output_file}")
             except Exception as e:
                 print(f"An error occurred while processing {pdf_file}: {str(e)}")
+    
+    xhtml_files = [os.path.join(output_folder, f) for f in os.listdir(output_folder) if f.endswith(".xhtml")]
+    xhtml_files.sort(key=lambda f: int(re.findall(r'\d+', os.path.splitext(f)[0].split('-')[-1])[0]))
+    
+    epub_output_file = os.path.join(folder_path, "ocr_result.epub")
+    create_epub(xhtml_files, epub_output_file)
+    print(f"EPUB file created: {epub_output_file}")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="OCR PDFs and create XHTML files")
