@@ -31,6 +31,24 @@ def process_pdf(pdf_file):
     
     return "\n\n".join(all_text)
 
+def format_paragraphs(text):
+    paragraphs = text.splitlines()
+    formatted_paragraphs = []
+    paragraph = ""
+
+    for line in paragraphs:
+        if line.strip():
+            paragraph += line + " "
+        else:
+            if paragraph.strip():
+                formatted_paragraphs.append(paragraph.strip())
+                paragraph = ""
+    
+    if paragraph.strip():
+        formatted_paragraphs.append(paragraph.strip())
+
+    return "<p>" + "</p><p>".join(formatted_paragraphs) + "</p>"
+
 def extract_last_number(filename):
     # Extract the last number or range from the filename
     match = re.search(r'(\d+)(-\d+)?(?=\.pdf$)', filename)
@@ -40,12 +58,12 @@ def extract_last_number(filename):
         return start, end
     return float('inf'), float('inf')  # Return a high value to sort invalid names last
 
-def create_epub_from_ocr(folder_path, output_file):
+def create_epub_from_ocr(folder_path, book_name, author_name, output_file):
     book = epub.EpubBook()
     book.set_identifier('id123456')
-    book.set_title('OCR Result')
-    book.set_language('en')
-    book.add_author('Generated Author')
+    book.set_title(book_name)
+    book.set_language('bn')
+    book.add_author(author_name)
 
     spine = ['nav']
     toc = []
@@ -61,12 +79,13 @@ def create_epub_from_ocr(folder_path, output_file):
             full_text = process_pdf(pdf_file)
             if full_text.strip():
                 chapter_title = os.path.splitext(filename)[0]
+                formatted_content = format_paragraphs(full_text)
                 chapter = epub.EpubHtml(
                     title=chapter_title, 
                     file_name=f'{chapter_title}.xhtml', 
-                    lang='en'
+                    lang='bn'
                 )
-                chapter.content = f'<h1>{chapter_title}</h1><p>{full_text}</p>'
+                chapter.content = f'<h1>{chapter_title}</h1>{formatted_content}'
                 
                 book.add_item(chapter)
                 spine.append(chapter)
@@ -94,7 +113,9 @@ def create_epub_from_ocr(folder_path, output_file):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="OCR PDFs and create EPUB")
     parser.add_argument("folder_path", help="Path to the folder containing PDF files")
+    parser.add_argument("book_name", help="The name of the book")
+    parser.add_argument("author_name", help="The author of the book")
     args = parser.parse_args()
 
-    output_epub_file = os.path.join(args.folder_path, "ocr_result.epub")
-    create_epub_from_ocr(args.folder_path, output_epub_file)
+    output_epub_file = os.path.join(args.folder_path, f"{args.book_name.replace(' ', '_')}.epub")
+    create_epub_from_ocr(args.folder_path, args.book_name, args.author_name, output_epub_file)
