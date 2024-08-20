@@ -59,7 +59,7 @@ def extract_last_number(filename):
         return start, end
     return float('inf'), float('inf')  # Return a high value to sort invalid names last
 
-def create_epub_from_ocr(folder_path, book_name, author_name, output_file):
+def create_epub_from_ocr(input_path, book_name, author_name, output_path):
     book = epub.EpubBook()
     book.set_identifier('id123456')
     book.set_title(book_name)
@@ -69,11 +69,11 @@ def create_epub_from_ocr(folder_path, book_name, author_name, output_file):
     spine = ['nav']
     toc = []
 
-    pdf_files = [f for f in os.listdir(folder_path) if f.endswith(".pdf")]
+    pdf_files = [f for f in os.listdir(input_path) if f.endswith(".pdf")]
     pdf_files.sort(key=lambda f: extract_last_number(f))
 
     for filename in pdf_files:
-        pdf_file = os.path.join(folder_path, filename)
+        pdf_file = os.path.join(input_path, filename)
         print(f"Processing file: {pdf_file}")
         
         try:
@@ -108,6 +108,8 @@ def create_epub_from_ocr(folder_path, book_name, author_name, output_file):
     book.add_item(epub.EpubNav())
     book.spine = spine
 
+    output_file = os.path.join(output_path, f"{book_name.replace(' ', '_')}.epub")
+    
     try:
         epub.write_epub(output_file, book, {})
         print(f"EPUB file created: {output_file}")
@@ -116,10 +118,13 @@ def create_epub_from_ocr(folder_path, book_name, author_name, output_file):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="OCR PDFs and create EPUB")
-    parser.add_argument("folder_path", help="Path to the folder containing PDF files")
-    parser.add_argument("book_name", help="The name of the book")
-    parser.add_argument("author_name", help="The author of the book")
+    parser.add_argument("--input-path", required=True, help="Path to the folder containing PDF files")
+    parser.add_argument("--output-path", help="Path to the folder where the EPUB file will be saved (defaults to input path)")
+    parser.add_argument("--book-name", required=True, help="The name of the book")
+    parser.add_argument("--author", required=True, help="The author of the book")
     args = parser.parse_args()
 
-    output_epub_file = os.path.join(args.folder_path, f"{args.book_name.replace(' ', '_')}.epub")
-    create_epub_from_ocr(args.folder_path, args.book_name, args.author_name, output_epub_file)
+    # If output path is not provided, default to the input path
+    output_path = args.output_path if args.output_path else args.input_path
+
+    create_epub_from_ocr(args.input_path, args.book_name, args.author, output_path)
