@@ -4,6 +4,7 @@ import re
 import pytesseract
 from pdf2image import convert_from_bytes
 from ebooklib import epub
+from lxml import etree
 
 # Specify the path to your custom tessdata directory
 custom_tessdata_dir = os.path.abspath('./custom_tessdata')
@@ -47,7 +48,14 @@ def format_paragraphs(text):
     if paragraph.strip():
         formatted_paragraphs.append(paragraph.strip())
 
-    return "<p>" + "</p><p>".join(formatted_paragraphs) + "</p>"
+    content = "<p>" + "</p><p>".join(formatted_paragraphs) + "</p>"
+    return prettify_xhtml(content)
+
+def prettify_xhtml(content):
+    # Use lxml to prettify the XHTML content
+    parser = etree.XMLParser(remove_blank_text=True)
+    root = etree.fromstring(f"<body>{content}</body>", parser)
+    return etree.tostring(root, pretty_print=True, encoding='unicode', method="html")
 
 def extract_last_number(filename):
     # Extract the last number or range from the filename
@@ -78,18 +86,21 @@ def create_epub_from_ocr(folder_path, book_name, author_name, output_file):
         try:
             full_text = process_pdf(pdf_file)
             if full_text.strip():
-                chapter_title = os.path.splitext(filename)[0]
+                chapter_title = book_name  # Use the book name as the title
+                xhtml_filename = f'{os.path.splitext(filename)[0]}.xhtml'  # Generate XHTML filename from PDF filename
                 formatted_content = format_paragraphs(full_text)
                 chapter = epub.EpubHtml(
                     title=chapter_title, 
-                    file_name=f'{chapter_title}.xhtml', 
+                    file_name=xhtml_filename, 
                     lang='bn'
                 )
                 chapter.content = f'<h1>{chapter_title}</h1>{formatted_content}'
                 
                 book.add_item(chapter)
                 spine.append(chapter)
-                toc.append(epub.Link(f'{chapter_title}.xhtml', chapter_title, chapter_title))
+                
+                toc_text = os.path.splitext(filename)[0]  # Use the XHTML file name (without extension) for the TOC
+                toc.append(epub.Link(xhtml_filename, toc_text, toc_text))
             else:
                 print(f"No text extracted from {filename}")
         except Exception as e:
