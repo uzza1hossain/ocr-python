@@ -4,7 +4,6 @@ import re
 import pytesseract
 from pdf2image import convert_from_bytes
 from ebooklib import epub
-from lxml import etree
 
 # Specify the path to your custom tessdata directory
 custom_tessdata_dir = os.path.abspath('./custom_tessdata')
@@ -49,13 +48,7 @@ def format_paragraphs(text):
         formatted_paragraphs.append(paragraph.strip())
 
     content = "<p>" + "</p><p>".join(formatted_paragraphs) + "</p>"
-    return prettify_xhtml(content)
-
-def prettify_xhtml(content):
-    # Use lxml to prettify the XHTML content
-    parser = etree.XMLParser(remove_blank_text=True)
-    root = etree.fromstring(f"<body>{content}</body>", parser)
-    return etree.tostring(root, pretty_print=True, encoding='unicode', method="html")
+    return content
 
 def extract_last_number(filename):
     # Extract the last number or range from the filename
